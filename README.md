@@ -1,6 +1,6 @@
 # warera-fetch
 
-A command-line tool for fetching data from the [Warera](https://app.warera.io) game API. Every known tRPC endpoint has a first-class alias with a uniform flag set, JSON output, and optional human-readable formatting.
+A command-line tool for fetching data from the [WarEra](https://app.warera.io) game API. Every known tRPC endpoint has a first-class alias with a uniform flag set, JSON output, and optional human-readable formatting.
 
 ## Requirements
 
@@ -20,8 +20,6 @@ Create `.warera_token` in the project directory:
 ```
 
 Get your API key: **Warera → Settings → API Tokens**
-
-> **JWT warning:** Using your session JWT (`--jwt` flag) risks an account ban. Use API keys instead.
 
 ---
 
@@ -153,14 +151,6 @@ python fetch.py https://app.warera.io/mu/<id>
 ```
 fetch.py          — main CLI (~2000 lines, single file, self-installing deps)
 warera_api.py     — WaraApiClient (httpx async, 429 retry, semaphore)
-specs/            — 23 endpoint reference docs (JSON + MD, read-only)
-docs/
-  plans/          — refactor plan
-  cli-design/     — alias-oriented design docs (source of truth)
-    _contract.md  — uniform flag contract
-    _command-map.md — alias↔endpoint mapping
-    _spec-audit.md  — live API verification notes
-    *.md          — per-alias design files
 tests/
   smoke_cli.sh    — one-row-per-alias smoke test (bash)
   test_*.py       — pytest unit tests
@@ -188,4 +178,4 @@ WARERA_API_KEY=wae_... bash tests/smoke_cli.sh
 
 MIT — see [LICENSE](LICENSE).
 
-> This is an unofficial third-party tool. Not affiliated with the Warera game or its developers.
+> This is an unofficial third-party tool. Not affiliated with the WarEra game or its developers.
