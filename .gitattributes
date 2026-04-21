@@ -1,0 +1,11 @@
+# Force LF for shell scripts and Python source (cross-platform safe)
+*.sh    text eol=lf
+*.py    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# Binary — no line ending conversion
+*.zip   binary
+*.png   binary
+*.jpg   binary
