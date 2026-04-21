@@ -35,10 +35,6 @@ output/
 # Re-include tracked markdown docs
 !README.md
 !CHANGELOG.md
-!docs/**/*.md
-!specs/**/*.md
-!CLAUDE.md
-!tests/smoke_cli.sh
 
 # Editor / OS
 .vscode/
