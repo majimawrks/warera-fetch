@@ -21,8 +21,6 @@ Create `.warera_token` in the project directory:
 
 Get your API key: **Warera → Settings → API Tokens**
 
-> **Security note:** `.warera_token` is gitignored, but if this project lives in a cloud-synced folder (OneDrive, Dropbox, Google Drive) the file will be uploaded to cloud storage. Either move the project outside the synced folder or store the key in the `WARERA_API_KEY` environment variable instead.
-
 ---
 
 ## Commands
