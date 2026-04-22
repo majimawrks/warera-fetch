@@ -1758,20 +1758,20 @@ def build_parser() -> argparse.ArgumentParser:
     # ── ranking ───────────────────────────────────────────────────────────────
     p = subs.add_parser(
         "ranking",
-        help="Global rankings (users/countries/MUs) or battle rankings",
+        help="Global metric rankings or in-battle rankings",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Fetch rankings.\n\n"
-            "  --type user|country|mu  → ranking.getRanking\n"
-            "  --type battle           → battleRanking.getRanking (requires --battle-id or --battle-url)"
+            "  --type <metric>  → ranking.getRanking  (global; 25 metric types)\n"
+            "  --type battle    → battleRanking.getRanking  (requires --battle-id, --entity, --side)"
         ),
         epilog=(
             "examples:\n"
             "  python fetch.py ranking --type userDamages --limit 20\n"
             "  python fetch.py ranking --type countryWealth\n"
             "  python fetch.py ranking --type muBounty\n"
-            "  python fetch.py ranking --type battle --battle-id <id>\n"
-            "  python fetch.py ranking --type battle --battle-url https://app.warera.io/battle/<id> --data-type points --side attacker\n"
+            "  python fetch.py ranking --type battle --battle-id <id> --entity user --side merged\n"
+            "  python fetch.py ranking --type battle --battle-url https://app.warera.io/battle/<id> --entity country --side attacker --data-type points\n"
             + _AUTH_EPILOG
         ),
     )
@@ -1783,17 +1783,20 @@ def build_parser() -> argparse.ArgumentParser:
                        "Full list: " + ", ".join(VALID_RANKING_TYPES)
                    ))
     p.add_argument("--limit", type=int, metavar="N", default=None,
-                   help="Max results.")
+                   help="Max results (global rankings only).")
     p.add_argument("--battle-id", metavar="ID", dest="battle_id", default=None,
-                   help="Battle ID (required when --type battle).")
+                   help="Battle ID (--type battle).")
     p.add_argument("--battle-url", metavar="URL", dest="battle_url", default=None,
-                   help="Battle URL (alternative to --battle-id when --type battle).")
+                   help="Battle URL (--type battle, alternative to --battle-id).")
+    p.add_argument("--entity", metavar="TYPE", default=None,
+                   choices=["user", "country", "mu"],
+                   help="Entity type to rank within battle (--type battle): user, country, or mu.")
+    p.add_argument("--side", metavar="SIDE", default=None,
+                   choices=["attacker", "defender", "merged"],
+                   help="Battle side (--type battle): attacker, defender, or merged.")
     p.add_argument("--data-type", metavar="TYPE", dest="data_type", default="damage",
                    choices=["damage", "points"],
-                   help="Metric to rank by (battle type only): damage (default) or points.")
-    p.add_argument("--side", metavar="SIDE", default=None,
-                   choices=["attacker", "defender"],
-                   help="Battle side (battle type only): attacker or defender.")
+                   help="Metric for battle rankings: damage (default) or points.")
     _add_output_args(p)
     _add_auth_args(p)
 
@@ -2858,19 +2861,34 @@ async def main() -> None:
                         file=sys.stderr,
                     )
                     sys.exit(1)
+                entity = getattr(args, "entity", None)
+                side = getattr(args, "side", None)
+                if not entity:
+                    print(
+                        "error: ranking --type battle requires --entity user|country|mu",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                if not side:
+                    print(
+                        "error: ranking --type battle requires --side attacker|defender|merged",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
                 ranking_params: dict = {
                     "battleId": battle_id,
+                    "type": entity,
+                    "side": side,
                     "dataType": getattr(args, "data_type", "damage") or "damage",
                 }
-                if getattr(args, "side", None):
-                    ranking_params["side"] = args.side
                 try:
                     result = await client.call_endpoint("battleRanking.getRanking", ranking_params)
                 except Exception as exc:
                     print(f"error: {exc}", file=sys.stderr)
                     sys.exit(1)
             else:
-                ranking_params = {"type": ranking_type}
+                # Global ranking: API field is "rankingType", not "type"
+                ranking_params = {"rankingType": ranking_type}
                 if getattr(args, "limit", None) is not None:
                     ranking_params["limit"] = args.limit
                 try:
