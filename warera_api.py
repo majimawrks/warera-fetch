@@ -16,19 +16,20 @@ def _require(*packages: tuple) -> None:
         print(f"[setup] Installing: {' '.join(missing_pip)} ...", file=sys.stderr)
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", *missing_pip],
-            stdout=subprocess.DEVNULL,
         )
         print("[setup] Done.", file=sys.stderr)
 
 
 _require(
-    ("httpx", "httpx"),
+    ("httpx", "httpx==0.28.1"),
 )
 
 import asyncio
 import json
+import random
 import time
 import urllib.parse
+from typing import Any
 import httpx
 
 BASE_URL = "https://api2.warera.io/trpc"
@@ -84,11 +85,24 @@ class WaraApiClient:
     async def __aexit__(self, *args):
         await self._client.aclose()
 
+    def __del__(self):
+        # Best-effort cleanup if the client is abandoned without using a context manager.
+        if not self._client.is_closed:
+            try:
+                import asyncio as _asyncio
+                loop = _asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._client.aclose())
+                else:
+                    loop.run_until_complete(self._client.aclose())
+            except Exception:
+                pass
+
     def _dbg(self, msg: str) -> None:
         if self._debug:
             print(f"  [debug] {msg}", file=sys.stderr)
 
-    async def call_endpoint(self, endpoint: str, params: dict) -> any:
+    async def call_endpoint(self, endpoint: str, params: dict) -> Any:
         """Generic caller for any Warera tRPC endpoint, with rate-limit retry."""
         input_json = urllib.parse.quote(json.dumps(params))
         url = f"{BASE_URL}/{endpoint}?input={input_json}"
@@ -101,8 +115,8 @@ class WaraApiClient:
                 elapsed = time.monotonic() - t0
 
                 if response.status_code == 429:
-                    wait = 2 ** attempt
-                    self._dbg(f"429 rate-limited — retry {attempt + 1}/{MAX_RETRIES} in {wait}s")
+                    wait = 2 ** attempt + random.uniform(0, 1)
+                    self._dbg(f"429 rate-limited — retry {attempt + 1}/{MAX_RETRIES} in {wait:.1f}s")
                     await asyncio.sleep(wait)
                     continue
 

@@ -19,15 +19,13 @@ def _require(*packages: tuple) -> None:
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", *missing_pip],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
         print("[setup] Done.", file=sys.stderr)
 
 
 _require(
-    ("httpx",           "httpx"),
-    ("tqdm",            "tqdm"),
-    ("browser_cookie3", "browser-cookie3"),
+    ("httpx", "httpx==0.28.1"),
+    ("tqdm",  "tqdm==4.67.3"),
 )
 
 import argparse
@@ -667,6 +665,8 @@ URL_PARAM_MAP: dict[str, str] = {
     "referral": "referralId",
 }
 
+_SAFE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
 def parse_warera_url(url: str) -> tuple[str, str] | None:
     """Extract (entity_type, entity_id) from a Warera app URL.
 
@@ -682,12 +682,18 @@ def parse_warera_url(url: str) -> tuple[str, str] | None:
         parsed = urlparse(url)
     except Exception:
         return None
+    if parsed.scheme not in ("http", "https"):
+        return None
     if parsed.hostname != WARERA_APP_HOST:
         return None
     parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 2:
         return None
-    return parts[0], parts[1]   # (entity_type, entity_id)
+    entity_type, entity_id = parts[0], parts[1]
+    # Reject path-traversal attempts and suspiciously-shaped IDs
+    if not _SAFE_ID_RE.match(entity_id):
+        return None
+    return entity_type, entity_id
 
 
 # ── Article fetching by country ───────────────────────────────────────────────
@@ -1327,6 +1333,13 @@ def auto_output_path(args: "argparse.Namespace", entity_id: str | None = None) -
 
 def save_output(content: str | list, path: str) -> None:
     p = Path(path)
+    # For auto-generated paths (always under output/) enforce containment so a
+    # crafted entity_id in a URL can't escape the project directory.
+    if not Path(path).is_absolute():
+        resolved = p.resolve()
+        allowed = Path.cwd().resolve()
+        if not str(resolved).startswith(str(allowed)):
+            _fatal(f"error: output path '{p}' resolves outside working directory — aborting")
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.suffix.lower() == ".json":
         p.write_text(json.dumps(content, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1985,73 +1998,6 @@ def _jwt_expiry_info(token: str) -> tuple[bool, int | None]:
         return remaining > 0, remaining
     except Exception:
         return True, None
-
-
-def _jwt_from_browser() -> str | None:
-    """Try to read the 'jwt' cookie for warera.io from the running browser profile.
-
-    Supports Chrome, Firefox, Edge, and Firefox-fork browsers (Floorp, Zen, LibreWolf, etc.)
-    Requires the optional package:  pip install browser-cookie3
-    Returns None (silently) if the package is missing or the cookie isn't found.
-    """
-    try:
-        import browser_cookie3  # type: ignore
-    except ImportError:
-        return None
-
-    # Standard browsers first
-    for loader in (browser_cookie3.chrome, browser_cookie3.firefox, browser_cookie3.edge):
-        try:
-            jar = loader(domain_name="warera.io")
-            for cookie in jar:
-                if cookie.name == "jwt" and cookie.value:
-                    return cookie.value
-        except Exception:
-            continue
-
-    # Firefox-fork browsers: same SQLite cookie format, just different AppData paths.
-    # Look inside each fork's Profiles/ directory for a cookies.sqlite, then use
-    # browser_cookie3.firefox(cookie_file=...) to read it exactly like real Firefox.
-    appdata = os.environ.get("APPDATA", "")
-    localappdata = os.environ.get("LOCALAPPDATA", "")
-    home = Path.home()
-
-    firefox_fork_roots: list[Path] = []
-    for base in (appdata, localappdata):
-        if base:
-            for fork in ("Floorp", "Zen Browser", "LibreWolf", "Waterfox", "Pale Moon", "IceCat"):
-                firefox_fork_roots.append(Path(base) / fork / "Profiles")
-    # Linux / macOS variants (harmless to check on Windows)
-    for fork_dir in (".floorp", ".zen", ".librewolf", ".waterfox"):
-        firefox_fork_roots.append(home / fork_dir)
-
-    for profiles_dir in firefox_fork_roots:
-        if not profiles_dir.exists():
-            continue
-        # Prefer most-recently-modified profile (the active one)
-        try:
-            profiles = sorted(
-                [p for p in profiles_dir.iterdir() if p.is_dir()],
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-        except Exception:
-            continue
-        for profile in profiles:
-            cookie_db = profile / "cookies.sqlite"
-            if not cookie_db.exists():
-                continue
-            try:
-                jar = browser_cookie3.firefox(
-                    cookie_file=str(cookie_db), domain_name="warera.io"
-                )
-                for cookie in jar:
-                    if cookie.name == "jwt" and cookie.value:
-                        return cookie.value
-            except Exception:
-                continue
-
-    return None
 
 
 # Resolve token file path once at import time, relative to this script's directory.
@@ -2907,6 +2853,14 @@ async def main() -> None:
 
         # ── raw ───────────────────────────────────────────────────────────────
         if cmd == "raw":
+            _ENDPOINT_RE = re.compile(r'^[A-Za-z]+\.[A-Za-z]+$')
+            if not _ENDPOINT_RE.match(args.endpoint):
+                print(
+                    f"error: endpoint '{args.endpoint}' is not a valid tRPC endpoint.\n"
+                    "  Expected format: namespace.methodName  (e.g. event.getEventsPaginated)",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             params = build_params(args, resolved_country_id)
             try:
                 result = await client.call_endpoint(args.endpoint, params)

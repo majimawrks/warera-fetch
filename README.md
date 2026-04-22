@@ -5,7 +5,7 @@ A command-line tool for fetching data from the [WarEra](https://app.warera.io) g
 ## Requirements
 
 - Python 3.11+
-- Dependencies auto-installed on first run via `_require()`: `httpx`, `tqdm`
+- Dependencies auto-installed on first run via `_require()`: `httpx==0.28.1`, `tqdm==4.67.3`
 
 ## Authentication
 
@@ -20,6 +20,8 @@ Create `.warera_token` in the project directory:
 ```
 
 Get your API key: **Warera → Settings → API Tokens**
+
+> **Security note:** `.warera_token` is gitignored, but if this project lives in a cloud-synced folder (OneDrive, Dropbox, Google Drive) the file will be uploaded to cloud storage. Either move the project outside the synced folder or store the key in the `WARERA_API_KEY` environment variable instead.
 
 ---
 
@@ -173,6 +175,11 @@ WARERA_API_KEY=wae_... bash tests/smoke_cli.sh
 ```
 
 ---
+
+## Notes
+
+- API requests identify themselves with a Chrome browser User-Agent and include `Origin: https://app.warera.io`. This is required for some endpoints (e.g. referrals) that check the request origin. All requests go to `api2.warera.io` — no data is routed through any third-party server.
+- This tool is read-only. It never writes data back to the game.
 
 ## License
 
